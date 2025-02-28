@@ -505,7 +505,7 @@ function send_hl7_order($ppid, $out)
         return xl('Internal error: Cannot find MSH-10');
     }
 
-    if ($protocol == 'DL' || $pprow['orders_path'] === '') {
+    if ($protocol == 'DL') {
         header("Pragma: public");
         header("Expires: 0");
         header("Cache-Control: must-revalidate, post-check=0, pre-check=0");
@@ -544,8 +544,70 @@ function send_hl7_order($ppid, $out)
         } else {
             return xl('Cannot create file') . ' "' . "$filename" . '"';
         }
-    } else {// TBD: Insert "else if ($protocol == '???') {...}" to support other protocols.
-        return xl('This protocol is not implemented') . ": '$protocol'";
+    } else { 
+        $ip_address = $remote_host;
+        $port = $pprow['login'];
+        $endpoint = $pprow['password'];
+        
+        if($endpoint === ''){
+            if (!$port) {
+                return xl('Invalid port number for TCP connection');
+            }
+            
+            $socket = socket_create(AF_INET, SOCK_STREAM, SOL_TCP);
+            if ($socket === false) {
+                return xl('Socket creation failed') . ': ' . socket_strerror(socket_last_error());
+            }
+            
+            socket_set_option($socket, SOL_SOCKET, SO_RCVTIMEO, array('sec' => 30, 'usec' => 0));
+            socket_set_option($socket, SOL_SOCKET, SO_SNDTIMEO, array('sec' => 30, 'usec' => 0));
+            
+            $result = socket_connect($socket, $ip_address, $port);
+            if ($result === false) {
+                socket_close($socket);
+                return xl('Could not connect to') . " $ip_address:$port - " . socket_strerror(socket_last_error());
+            }
+            
+            
+            $mllpMessage = "\x0B" . $out . "\x1C\x0D";  // MLLP-framed message
+            
+            $result = socket_write($socket, $mllpMessage, strlen($mllpMessage));
+            if ($result === false) {
+                socket_close($socket);
+                return xl('Failed to send MLLP-framed HL7 message') . ': ' . socket_strerror(socket_last_error());
+            }
+            
+            $ack = socket_read($socket, 2048);
+            socket_close($socket);
+            
+            if ($ack === false) {
+                return xl('Failed to receive MLLP acknowledgment') . ': ' . socket_strerror(socket_last_error());
+            }
+            
+            error_log("MLLP acknowledgment received: $ack");
+            return xl('TCP message sent successfully. Acknowledgment received.');
+        } else {
+            $url = "http://" . $remote_host . ":" . $port . $endpoint;
+            $ch = curl_init($url);
+    
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: text/plain']);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $out);
+    
+            $response = curl_exec($ch);
+            $httpStatus = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    
+            if (curl_errno($ch)) {
+                error_log("cURL error: " . curl_error($ch));
+                return xl('Failed to send HTTP request') . ": " . curl_error($ch);
+            }
+    
+            curl_close($ch);
+    
+            error_log("HTTP request sent. Response: $response, Status Code: $httpStatus");
+            return xl('HTTP request sent successfully.') . " Status Code: $httpStatus";
+        }  
     }
 
   // Falling through to here indicates success.

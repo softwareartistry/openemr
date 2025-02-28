@@ -332,7 +332,7 @@ function onvalue($name)
                             </div>
                             <div class="row col-12">
                                 <div class="col-sm-6">
-                                    <select name='form_protocol' id='form_protocol' class='form-control'>
+                                    <select onchange='toggleLoginFields()' name='form_protocol' id='form_protocol' class='form-control'>
                                         <?php
                                         foreach (
                                             array(
@@ -340,7 +340,8 @@ function onvalue($name)
                                             'DL' => xl('Download'),
                                             'SFTP' => xl('SFTP'),
                                             'FS' => xl('Local Filesystem'),
-                                            'WS' => xl('Web Service'),
+                                            'TCP' => xl('TCP'),
+                                            'HTTP' => xl('HTTP'),
                                             ) as $key => $value
                                         ) {
                                             echo "    <option value='" . attr($key) . "'";
@@ -385,25 +386,21 @@ function onvalue($name)
                         </div>
                     </div>
                 </div>
+                
                 <div class="row mt-3">
                     <div class="col-12">
                         <div class="clearfix">
                             <div class="col-sm-12 label-div">
-                                <label for="form_login"><?php echo xlt('Login'); ?>:</label> <a href="#login_info" class="info-anchor icon-tooltip" data-toggle="collapse"><i class="fa fa-question-circle" aria-hidden="true"></i></a>
+                                <label for="form_login" id="form_protocol_data">Login & Password</label>
                             </div>
                             <div class="row col-12">
                                 <div class="col-sm-6">
-                                    <input type='text' name='form_login' id='form_login' maxlength='255' value='<?php echo attr($row['login'] ?? ''); ?>' placeholder='<?php echo xla('Enter User Login ID'); ?>' class='form-control' />
+                                    <input type='text' name='form_login' id='form_login' maxlength='255' value='<?php echo attr($row['login'] ?? ''); ?>'  class='form-control' />
                                 </div>
                                 <div class="col-sm-6">
-                                    <input type='text' name='form_password' id='form_password' maxlength='255' value='<?php echo attr($row['password'] ?? ''); ?>' placeholder='<?php echo xla('Enter Password'); ?>' class='form-control' />
+                                    <input type='text' name='form_password' id='form_password' maxlength='255' value='<?php echo attr($row['password'] ?? ''); ?>'  class='form-control' />
                                 </div>
                             </div>
-                        </div>
-                        <div id="login_info" class="collapse">
-                            <a href="#login_info" data-toggle="collapse" class="oe-pull-away"><i class="fa fa-times oe-help-x" aria-hidden="true"></i></a>
-                            <p><?php echo xlt("Login - details are only required if you are connecting to a facility using the SFTP protocol "); ?></p>
-                            <p><?php echo xlt("Type in the username and password provided by the facility"); ?></p>
                         </div>
                     </div>
                 </div>
@@ -495,6 +492,25 @@ function onvalue($name)
     </div>
 </div><!--end of container div-->
 <script>
+    function toggleLoginFields() {
+        const protocol = document.getElementById('form_protocol').value;
+        const label = document.getElementById('form_protocol_data');    
+        const passwordField = document.getElementById('form_password');
+
+        if (protocol === 'TCP') {
+            label.innerHTML = 'TCP Port'
+            passwordField.style.display = 'none';
+        } else if(protocol === 'HTTP') {
+            label.innerHTML = 'HTTP Port & Endpoint Path'
+            passwordField.style.display = 'block';
+        } else {
+            label.innerHTML = 'Username/Password'
+            passwordField.style.display = 'block';
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', toggleLoginFields);
+
     //jqury-ui tooltip
     $(function () {
         $('.icon-tooltip i').attr({"title": <?php echo xlj('Click to see more information'); ?>, "data-toggle": "tooltip", "data-placement": "bottom"}).tooltip({
