@@ -1,60 +1,20 @@
-# Use official PHP-FPM image
-FROM php:8.1-fpm
+# Use the official OpenEMR image as a base
+FROM openemr/openemr:7.0.0
 
-# Install required PHP extensions
-RUN apt-get update && apt-get install -y \
-    libfreetype6-dev \
-    libjpeg62-turbo-dev \
-    libpng-dev \
-    libpq-dev \
-    libxml2-dev \
-    libzip-dev \
-    unzip \
-    git \
-    && docker-php-ext-install -j$(nproc) \
-    mysqli \
-    pdo_mysql \
-    xml \
-    zip \
-    soap \
-    # Enable GD with freetype and jpeg support
-    && docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install gd
+# No need to install most extensions - they're already in the base image
+# Just add what's missing
 
-# Install composer
-RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
-
-# Set memory limits
-RUN echo "memory_limit=-1" > /usr/local/etc/php/conf.d/memory-limit.ini
-
-# Set up GitHub authentication if token is provided
-ARG GITHUB_TOKEN
-RUN if [ -n "$GITHUB_TOKEN" ]; then \
-      composer config -g github-oauth.github.com ${GITHUB_TOKEN}; \
-    else \
-      echo "No GitHub token provided, skipping GitHub authentication"; \
-    fi
-
-# Create app directory
+# Create app directory - don't override the existing codebase
 WORKDIR /var/www/localhost/htdocs/openemr
 
-# Copy only composer files first to leverage Docker cache
-COPY composer.json composer.lock ./
+# Copy your custom code
+COPY --chown=www-data:www-data . .
 
-# Install dependencies without scripts or autoloading
-RUN composer install --no-dev --no-scripts --no-autoloader --verbose
+# Ensure proper permissions
+RUN chown -R www-data:www-data /var/www/localhost/htdocs/openemr
 
-# Now copy the rest of the application
-COPY . .
-
-# Generate optimized autoload files
-RUN composer dump-autoload --optimize
-
-# Set proper permissions
-RUN chown -R www-data:www-data .
-
-# Expose ports
+# Expose ports 
 EXPOSE 80 443
 
-# Start application
-CMD ["php-fpm"] 
+# Use the standard OpenEMR startup
+CMD ["/bin/sh", "-c", "apache2-foreground"] 
