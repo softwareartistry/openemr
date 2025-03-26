@@ -1,4 +1,4 @@
-# Use official PHP-FPM image instead of building our own
+# Use official PHP-FPM image
 FROM php:8.1-fpm
 
 # Install required PHP extensions
@@ -11,21 +11,23 @@ RUN apt-get update && apt-get install -y \
     libzip-dev \
     unzip \
     git \
-    # Add any missing extensions based on diagnostic output
     && docker-php-ext-install -j$(nproc) \
     mysqli \
     pdo_mysql \
     xml \
     zip \
-    soap
-
-WORKDIR /var/www/localhost/htdocs/openemr
-COPY . .
+    soap \
+    # Enable GD with freetype and jpeg support
+    && docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install gd
 
 # Install composer
 RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
 
-# Add GitHub authentication
+# Set memory limits
+RUN echo "memory_limit=-1" > /usr/local/etc/php/conf.d/memory-limit.ini
+
+# Set up GitHub authentication if token is provided
 ARG GITHUB_TOKEN
 RUN if [ -n "$GITHUB_TOKEN" ]; then \
       composer config -g github-oauth.github.com ${GITHUB_TOKEN}; \
@@ -33,20 +35,20 @@ RUN if [ -n "$GITHUB_TOKEN" ]; then \
       echo "No GitHub token provided, skipping GitHub authentication"; \
     fi
 
-# Set higher memory limit for Composer
-RUN echo "memory_limit=-1" > /usr/local/etc/php/conf.d/memory-limit.ini
+# Create app directory
+WORKDIR /var/www/localhost/htdocs/openemr
 
-# Add more debugging information to Composer install
-RUN set -x && \
-    composer config -g process-timeout 2000 && \
-    composer diagnose && \
-    composer install --no-dev --optimize-autoloader --verbose --no-progress 2>&1 || \
-    (echo "Composer install failed. Checking what's wrong..." && \
-     php -i | grep memory && \
-     composer why-not --all && \
-     composer install --no-dev --optimize-autoloader --verbose --no-progress --ignore-platform-reqs || \
-     (echo "Trying with --no-scripts" && \
-      composer install --no-dev --optimize-autoloader --no-scripts --verbose))
+# Copy only composer files first to leverage Docker cache
+COPY composer.json composer.lock ./
+
+# Install dependencies without scripts or autoloading
+RUN composer install --no-dev --no-scripts --no-autoloader --verbose
+
+# Now copy the rest of the application
+COPY . .
+
+# Generate optimized autoload files
+RUN composer dump-autoload --optimize
 
 # Set proper permissions
 RUN chown -R www-data:www-data .
@@ -55,10 +57,4 @@ RUN chown -R www-data:www-data .
 EXPOSE 80 443
 
 # Start application
-CMD ["php-fpm"]
-
-COPY composer.json composer.lock ./
-RUN composer install --no-dev --no-autoloader --no-scripts
-COPY . .
-RUN composer dump-autoload --optimize
-RUN composer install --no-dev --optimize-autoloader --no-plugins --no-scripts 
+CMD ["php-fpm"] 
