@@ -10,19 +10,31 @@ RUN apt-get update && apt-get install -y \
     libxml2-dev \
     libzip-dev \
     unzip \
+    git \
+    # Add any missing extensions based on diagnostic output
     && docker-php-ext-install -j$(nproc) \
     mysqli \
     pdo_mysql \
     xml \
     zip \
-    soap
+    soap \
+    # Add any missing extensions
 
 WORKDIR /var/www/localhost/htdocs/openemr
 COPY . .
 
-# Install composer dependencies
-RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer \
-    && composer install --no-dev --optimize-autoloader
+# Install composer
+RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+
+# Add GitHub authentication
+ARG GITHUB_TOKEN
+RUN composer config -g github-oauth.github.com ${GITHUB_TOKEN}
+
+# Set higher memory limit for Composer
+RUN echo "memory_limit=-1" > /usr/local/etc/php/conf.d/memory-limit.ini
+
+# Uncomment after testing:
+RUN composer install --no-dev --optimize-autoloader
 
 # Set proper permissions
 RUN chown -R www-data:www-data .
