@@ -3,6 +3,16 @@ name: Build and Deploy Application Image
 on:
   push:
     branches: [ main, feature/test ]
+    paths-ignore:
+      - 'docker/library/dockers/dev-php-fpm/**'  # Don't trigger on PHP base changes
+
+  # Add a separate workflow for PHP base changes
+  workflow_dispatch:
+    inputs:
+      rebuild_php_base:
+        description: 'Rebuild PHP base image'
+        required: false
+        default: 'false'
 
 permissions:
   contents: read
@@ -26,15 +36,6 @@ jobs:
           registry: registry.314ecorp.tech
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
-          
-      # First build the PHP base image
-      - name: Build PHP base image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./docker/library/dockers/dev-php-fpm
-          tags: registry.314ecorp.tech/openemr:php-base
-          platforms: linux/amd64,linux/arm64
-          push: true
           
       # Then build the application image using the PHP base
       - name: Build and push full application image
