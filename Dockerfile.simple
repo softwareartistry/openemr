@@ -1,5 +1,21 @@
-# Use the PHP base image we just built
-FROM registry.314ecorp.tech/openemr:php-base
+# Use official PHP-FPM image instead of building our own
+FROM php:8.1-fpm
+
+# Install required PHP extensions
+RUN apt-get update && apt-get install -y \
+    libfreetype6-dev \
+    libjpeg62-turbo-dev \
+    libpng-dev \
+    libpq-dev \
+    libxml2-dev \
+    libzip-dev \
+    unzip \
+    && docker-php-ext-install -j$(nproc) \
+    mysqli \
+    pdo_mysql \
+    xml \
+    zip \
+    soap
 
 WORKDIR /var/www/localhost/htdocs/openemr
 COPY . .
