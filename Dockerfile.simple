@@ -8,10 +8,14 @@ FROM openemr/openemr:7.0.0
 WORKDIR /var/www/localhost/htdocs/openemr
 
 # Copy your custom code
-COPY --chown=www-data:www-data . .
+COPY . .
 
 # Ensure proper permissions
-RUN chown -R www-data:www-data /var/www/localhost/htdocs/openemr
+# Check which user Apache is running as in the base image
+RUN grep -r "^User" /etc/apache2/apache2.conf || echo "User not found in apache2.conf"
+RUN grep -r "^Group" /etc/apache2/apache2.conf || echo "Group not found in apache2.conf"
+# Use Apache's default user in Alpine (likely apache)
+RUN chown -R apache:apache /var/www/localhost/htdocs/openemr || echo "Apache user not found, using root" && chown -R root:root /var/www/localhost/htdocs/openemr
 
 # Expose ports 
 EXPOSE 80 443
