@@ -20,5 +20,4 @@ RUN chown -R apache:apache /var/www/localhost/htdocs/openemr || echo "Apache use
 # Expose ports 
 EXPOSE 80 443
 
-# Use the standard OpenEMR startup
-CMD ["/bin/sh", "-c", "apache2-foreground"] 
+# Let the base image handle startup (inherit CMD from parent) 
