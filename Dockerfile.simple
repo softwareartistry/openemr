@@ -36,8 +36,17 @@ RUN if [ -n "$GITHUB_TOKEN" ]; then \
 # Set higher memory limit for Composer
 RUN echo "memory_limit=-1" > /usr/local/etc/php/conf.d/memory-limit.ini
 
-# Uncomment after testing:
-RUN composer install --no-dev --optimize-autoloader
+# Add more debugging information to Composer install
+RUN set -x && \
+    composer config -g process-timeout 2000 && \
+    composer diagnose && \
+    composer install --no-dev --optimize-autoloader --verbose --no-progress 2>&1 || \
+    (echo "Composer install failed. Checking what's wrong..." && \
+     php -i | grep memory && \
+     composer why-not --all && \
+     composer install --no-dev --optimize-autoloader --verbose --no-progress --ignore-platform-reqs || \
+     (echo "Trying with --no-scripts" && \
+      composer install --no-dev --optimize-autoloader --no-scripts --verbose))
 
 # Set proper permissions
 RUN chown -R www-data:www-data .
@@ -46,4 +55,10 @@ RUN chown -R www-data:www-data .
 EXPOSE 80 443
 
 # Start application
-CMD ["php-fpm"] 
+CMD ["php-fpm"]
+
+COPY composer.json composer.lock ./
+RUN composer install --no-dev --no-autoloader --no-scripts
+COPY . .
+RUN composer dump-autoload --optimize
+RUN composer install --no-dev --optimize-autoloader --no-plugins --no-scripts 
