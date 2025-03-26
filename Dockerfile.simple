@@ -27,7 +27,11 @@ RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local
 
 # Add GitHub authentication
 ARG GITHUB_TOKEN
-RUN composer config -g github-oauth.github.com ${GITHUB_TOKEN}
+RUN if [ -n "$GITHUB_TOKEN" ]; then \
+      composer config -g github-oauth.github.com ${GITHUB_TOKEN}; \
+    else \
+      echo "No GitHub token provided, skipping GitHub authentication"; \
+    fi
 
 # Set higher memory limit for Composer
 RUN echo "memory_limit=-1" > /usr/local/etc/php/conf.d/memory-limit.ini
