@@ -17,8 +17,7 @@ RUN apt-get update && apt-get install -y \
     pdo_mysql \
     xml \
     zip \
-    soap \
-    # Add any missing extensions
+    soap
 
 WORKDIR /var/www/localhost/htdocs/openemr
 COPY . .
