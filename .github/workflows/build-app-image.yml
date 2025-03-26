@@ -1,0 +1,39 @@
+name: Build and Deploy Application Image
+
+on:
+  push:
+    branches: [ main, feature/test ]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Private Registry
+        uses: docker/login-action@v3
+        with:
+          registry: registry.314ecorp.tech
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push full application image
+        uses: docker/build-push-action@v5
+        with:
+          context: .  # Use the root directory as context
+          file: ./Dockerfile  # Path to your new Dockerfile
+          tags: registry.314ecorp.tech/openemr:latest,registry.314ecorp.tech/openemr:${{ github.sha }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          cache-from: type=registry,ref=registry.314ecorp.tech/openemr:latest
+          cache-to: type=inline 

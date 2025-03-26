@@ -1,0 +1,48 @@
+version: '3.1'
+services:
+  mysql:
+    restart: always
+    image: mariadb:11.4
+    command: ['mariadbd','--character-set-server=utf8mb4','--ssl-ca=/etc/ssl/ca.pem','--ssl_cert=/etc/ssl/server-cert.pem','--ssl_key=/etc/ssl/server-key.pem']
+    ports:
+      - 3306:3306
+    volumes:
+      - ../library/sql-ssl-certs-keys/easy/ca.pem:/etc/ssl/ca.pem:ro
+      - ../library/sql-ssl-certs-keys/easy/server-cert.pem:/etc/ssl/server-cert.pem:ro
+      - ../library/sql-ssl-certs-keys/easy/server-key.pem:/etc/ssl/server-key.pem:ro
+      - databasevolume:/var/lib/mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: YourStrongRootPassword
+      MYSQL_USER: openemr
+      MYSQL_PASSWORD: YourStrongDBPassword
+      MYSQL_DATABASE: openemr
+
+  openemr:
+    restart: always
+    image: registry.314ecorp.tech/openemr:latest
+    ports:
+      - 80:80
+      - 443:443
+    volumes:
+      - sitesvolume:/var/www/localhost/htdocs/openemr/sites:rw
+      - logvolume:/var/log
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_ROOT_PASS: YourStrongRootPassword
+      MYSQL_USER: openemr
+      MYSQL_PASS: YourStrongDBPassword
+      OPENEMR_SETTING_site_addr_oath: 'https://your-integration-domain.com'
+      OPENEMR_SETTING_oauth_password_grant: 3
+      OPENEMR_SETTING_rest_system_scopes_api: 1
+      OPENEMR_SETTING_rest_api: 1
+      OPENEMR_SETTING_rest_fhir_api: 1
+      OPENEMR_SETTING_rest_portal_api: 1
+      OPENEMR_SETTING_portal_onsite_two_enable: 1
+      OPENEMR_SETTING_ccda_alt_service_enable: 3
+    depends_on:
+      - mysql
+
+volumes:
+  databasevolume: {}
+  sitesvolume: {}
+  logvolume: {} 
