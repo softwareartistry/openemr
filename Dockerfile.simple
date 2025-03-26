@@ -1,0 +1,18 @@
+# Use the PHP base image we just built
+FROM registry.314ecorp.tech/openemr:php-base
+
+WORKDIR /var/www/localhost/htdocs/openemr
+COPY . .
+
+# Install composer dependencies
+RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer \
+    && composer install --no-dev --optimize-autoloader
+
+# Set proper permissions
+RUN chown -R www-data:www-data .
+
+# Expose ports
+EXPOSE 80 443
+
+# Start application
+CMD ["php-fpm"] 
