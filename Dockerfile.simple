@@ -25,7 +25,7 @@
 # Use official PHP-FPM image
 FROM php:8.1-fpm
 
-# Install required PHP extensions
+# Install required PHP extensions and dependencies
 RUN apt-get update && apt-get install -y \
     libfreetype6-dev \
     libjpeg62-turbo-dev \
@@ -35,12 +35,17 @@ RUN apt-get update && apt-get install -y \
     libzip-dev \
     unzip \
     git \
+    curl \
+    npm \
+    nodejs \
     && docker-php-ext-install -j$(nproc) \
     mysqli \
     pdo_mysql \
     xml \
     zip \
     soap \
+    calendar \
+    exif \
     # Enable GD with freetype and jpeg support
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install gd
@@ -59,26 +64,34 @@ RUN if [ -n "$GITHUB_TOKEN" ]; then \
       echo "No GitHub token provided, skipping GitHub authentication"; \
     fi
 
-# Create app directory
+# Clone OpenEMR repository
+RUN git clone https://github.com/openemr/openemr.git /var/www/localhost/htdocs/openemr
+
+# Set the working directory
 WORKDIR /var/www/localhost/htdocs/openemr
 
-# Copy only composer files first to leverage Docker cache
-COPY composer.json composer.lock ./
+# Download OpenEMR codebase first
+RUN curl -L https://github.com/openemr/openemr/archive/refs/tags/v7.0.0.tar.gz | tar xz --strip-components=1
 
-# Install dependencies without scripts or autoloading
-RUN composer install --no-dev --no-scripts --no-autoloader --verbose
+# Install composer dependencies
+RUN composer install --no-dev
 
-# Now copy the rest of the application
-COPY . .
+# Install NPM dependencies and build frontend assets
+RUN npm install && npm run build
 
-# Generate optimized autoload files
-RUN composer dump-autoload --optimize
+# Copy your custom code over the OpenEMR base
+COPY . /var/www/localhost/htdocs/openemr/custom_code/
 
-# Set proper permissions
-RUN chown -R www-data:www-data .
+# Create necessary directories and set proper permissions
+RUN mkdir -p /var/www/localhost/htdocs/openemr/sites/default && \
+    chmod 755 /var/www/localhost/htdocs/openemr/sites && \
+    chmod 755 /var/www/localhost/htdocs/openemr/sites/default && \
+    touch /var/www/localhost/htdocs/openemr/sites/default/sqlconf.php && \
+    chmod 666 /var/www/localhost/htdocs/openemr/sites/default/sqlconf.php && \
+    chown -R www-data:www-data /var/www/localhost/htdocs/openemr
 
-# Expose ports
-EXPOSE 80 443
+# Expose port 9000 for PHP-FPM
+EXPOSE 9000
 
-# Start application
+# Start PHP-FPM
 CMD ["php-fpm"] 

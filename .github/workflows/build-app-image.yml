@@ -1,18 +1,9 @@
-name: Build and Deploy Application Image
+name: Build and Deploy OpenEMR Image
 
 on:
   push:
     branches: [ main, feature/test ]
-    paths-ignore:
-      - 'docker/library/dockers/dev-php-fpm/**'  # Don't trigger on PHP base changes
-
-  # Add a separate workflow for PHP base changes
   workflow_dispatch:
-    inputs:
-      rebuild_php_base:
-        description: 'Rebuild PHP base image'
-        required: false
-        default: 'false'
 
 permissions:
   contents: read
@@ -37,8 +28,7 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
           
-      # Then build the application image using the PHP base
-      - name: Build and push full application image
+      - name: Build and push OpenEMR image
         uses: docker/build-push-action@v5
         with:
           context: .
