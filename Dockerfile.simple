@@ -1,23 +1,84 @@
-# Use the official OpenEMR image as a base
-FROM openemr/openemr:7.0.0
+# # Use the official OpenEMR image as a base
+# FROM openemr/openemr:7.0.0
 
-# No need to install most extensions - they're already in the base image
-# Just add what's missing
+# # No need to install most extensions - they're already in the base image
+# # Just add what's missing
 
-# Create app directory - don't override the existing codebase
+# # Create app directory - don't override the existing codebase
+# WORKDIR /var/www/localhost/htdocs/openemr
+
+# # Copy your custom code
+# COPY . .
+
+# # Ensure proper permissions
+# # Check which user Apache is running as in the base image
+# RUN grep -r "^User" /etc/apache2/apache2.conf || echo "User not found in apache2.conf"
+# RUN grep -r "^Group" /etc/apache2/apache2.conf || echo "Group not found in apache2.conf"
+# # Use Apache's default user in Alpine (likely apache)
+# RUN chown -R apache:apache /var/www/localhost/htdocs/openemr || echo "Apache user not found, using root" && chown -R root:root /var/www/localhost/htdocs/openemr
+
+# # Expose ports 
+# EXPOSE 80 443
+
+# # Let the base image handle startup (inherit CMD from parent) 
+
+# Use official PHP-FPM image
+FROM php:8.1-fpm
+
+# Install required PHP extensions
+RUN apt-get update && apt-get install -y \
+    libfreetype6-dev \
+    libjpeg62-turbo-dev \
+    libpng-dev \
+    libpq-dev \
+    libxml2-dev \
+    libzip-dev \
+    unzip \
+    git \
+    && docker-php-ext-install -j$(nproc) \
+    mysqli \
+    pdo_mysql \
+    xml \
+    zip \
+    soap \
+    # Enable GD with freetype and jpeg support
+    && docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install gd
+
+# Install composer
+RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+
+# Set memory limits
+RUN echo "memory_limit=-1" > /usr/local/etc/php/conf.d/memory-limit.ini
+
+# Set up GitHub authentication if token is provided
+ARG GITHUB_TOKEN
+RUN if [ -n "$GITHUB_TOKEN" ]; then \
+      composer config -g github-oauth.github.com ${GITHUB_TOKEN}; \
+    else \
+      echo "No GitHub token provided, skipping GitHub authentication"; \
+    fi
+
+# Create app directory
 WORKDIR /var/www/localhost/htdocs/openemr
 
-# Copy your custom code
+# Copy only composer files first to leverage Docker cache
+COPY composer.json composer.lock ./
+
+# Install dependencies without scripts or autoloading
+RUN composer install --no-dev --no-scripts --no-autoloader --verbose
+
+# Now copy the rest of the application
 COPY . .
 
-# Ensure proper permissions
-# Check which user Apache is running as in the base image
-RUN grep -r "^User" /etc/apache2/apache2.conf || echo "User not found in apache2.conf"
-RUN grep -r "^Group" /etc/apache2/apache2.conf || echo "Group not found in apache2.conf"
-# Use Apache's default user in Alpine (likely apache)
-RUN chown -R apache:apache /var/www/localhost/htdocs/openemr || echo "Apache user not found, using root" && chown -R root:root /var/www/localhost/htdocs/openemr
+# Generate optimized autoload files
+RUN composer dump-autoload --optimize
 
-# Expose ports 
+# Set proper permissions
+RUN chown -R www-data:www-data .
+
+# Expose ports
 EXPOSE 80 443
 
-# Let the base image handle startup (inherit CMD from parent) 
+# Start application
+CMD ["php-fpm"] 
