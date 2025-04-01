@@ -4,6 +4,11 @@ on:
   push:
     branches: [ main, feature/test ]
   workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to build from'
+        required: false
+        default: 'main'
 
 permissions:
   contents: read
@@ -35,6 +40,8 @@ jobs:
           file: ./Dockerfile.simple
           build-args: |
             GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}
+            REPO_URL=https://github.com/softwareartistry/openemr.git
+            BRANCH=${{ github.event.inputs.branch || 'main' }}
           tags: registry.314ecorp.tech/openemr:latest,registry.314ecorp.tech/openemr:${{ github.sha }}
           platforms: linux/amd64,linux/arm64
           push: true

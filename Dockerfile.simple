@@ -64,23 +64,19 @@ RUN if [ -n "$GITHUB_TOKEN" ]; then \
       echo "No GitHub token provided, skipping GitHub authentication"; \
     fi
 
-# Clone OpenEMR repository
-RUN git clone https://github.com/openemr/openemr.git /var/www/localhost/htdocs/openemr
-
 # Set the working directory
 WORKDIR /var/www/localhost/htdocs/openemr
 
-# Download OpenEMR codebase first
-RUN curl -L https://github.com/openemr/openemr/archive/refs/tags/v7.0.0.tar.gz | tar xz --strip-components=1
+# Clone your forked OpenEMR repository (replace with your fork URL)
+ARG REPO_URL=https://github.com/softwareartistry/openemr.git
+ARG BRANCH=main
+RUN git clone --depth 1 --branch ${BRANCH} ${REPO_URL} .
 
 # Install composer dependencies
 RUN composer install --no-dev
 
 # Install NPM dependencies and build frontend assets
 RUN npm install && npm run build
-
-# Copy your custom code over the OpenEMR base
-COPY . /var/www/localhost/htdocs/openemr/custom_code/
 
 # Create necessary directories and set proper permissions
 RUN mkdir -p /var/www/localhost/htdocs/openemr/sites/default && \
