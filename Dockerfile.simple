@@ -67,10 +67,25 @@ RUN if [ -n "$GITHUB_TOKEN" ]; then \
 # Set the working directory
 WORKDIR /var/www/localhost/htdocs/openemr
 
-# Clone your forked OpenEMR repository (replace with your fork URL)
+# Clone OpenEMR repository with fallback to public repo if fork fails
 ARG REPO_URL=https://github.com/softwareartistry/openemr.git
 ARG BRANCH=main
-RUN git clone --depth 1 --branch ${BRANCH} ${REPO_URL} .
+
+# Clone with verbose output and handle authentication if needed
+RUN echo "Attempting to clone from ${REPO_URL} branch ${BRANCH}" && \
+    # Try with GitHub token if provided
+    if [ -n "$GITHUB_TOKEN" ]; then \
+      git clone --verbose --depth 1 --branch ${BRANCH} https://${GITHUB_TOKEN}@github.com/softwareartistry/openemr.git . || \
+      # Fallback to official repo if fork fails
+      (echo "Falling back to official OpenEMR repository" && \
+       git clone --verbose --depth 1 https://github.com/openemr/openemr.git .); \
+    else \
+      # Try without token
+      git clone --verbose --depth 1 --branch ${BRANCH} ${REPO_URL} . || \
+      # Fallback to official repo if fork fails
+      (echo "Falling back to official OpenEMR repository" && \
+       git clone --verbose --depth 1 https://github.com/openemr/openemr.git .); \
+    fi
 
 # Install composer dependencies
 RUN composer install --no-dev
