@@ -1,0 +1,27 @@
+# Use pre-built PHP image or official PHP
+FROM php:8.1-fpm
+
+# Minimal extensions needed for development
+RUN apt-get update && apt-get install -y \
+    git unzip libzip-dev libxml2-dev \
+    && docker-php-ext-install zip xml mysqli pdo_mysql
+
+WORKDIR /var/www/localhost/htdocs/openemr
+COPY . .
+
+# Install composer first
+RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+
+# Add GitHub authentication (if token is provided)
+ARG GITHUB_TOKEN
+RUN if [ -n "$GITHUB_TOKEN" ]; then \
+      composer config -g github-oauth.github.com ${GITHUB_TOKEN}; \
+    else \
+      echo "No GitHub token provided, skipping GitHub authentication"; \
+    fi
+
+# Then install dependencies
+RUN composer install
+
+# Start application
+CMD ["php-fpm"] 
