@@ -1,73 +1,34 @@
-FROM alpine:3.17
+FROM openemr/openemr:7.0.0
 
 # Add build arguments for customization
-ARG FORK_USERNAME="softwareartistry"
+ARG FORK_USERNAME="your-github-username"
 ARG FORK_BRANCH="master"
 ARG FORK_REPO="https://github.com/${FORK_USERNAME}/openemr.git"
 
-#Install dependencies and fix issue with apache ulimit
-RUN apk --no-cache upgrade && \
-    apk add --no-cache \
-    apache2 apache2-ssl apache2-utils apache-mod-fcgid git php81 php81-tokenizer php81-ctype php81-session php81-apache2 \
-    php81-json php81-pdo php81-pdo_mysql php81-curl php81-ldap php81-openssl php81-iconv php81-xml php81-xsl php81-gd \
-    php81-zip php81-soap php81-mbstring php81-zlib php81-mysqli php81-sockets php81-xmlreader php81-redis php81-simplexml \
-    php81-xmlwriter php81-phar php81-fileinfo php81-calendar php81-sodium php81-pcntl php81-ftp php81-pdo_pgsql php81-dom \
-    php81-intl php81-opcache php81-posix php81-sysvshm php81-exif perl mysql-client tar curl imagemagick nodejs npm \
-    ncurses shadow fcgid-dev build-base libpng-dev openldap-dev pcre-dev libxml2-dev php81-dev mariadb-dev \
-    openssl-dev oniguruma-dev linux-headers postgresql-dev libffi-dev python3 python3-dev composer libgcrypt-dev gpgme-dev && \
-    sed -i 's/^Listen 80$/Listen 0.0.0.0:80/' /etc/apache2/httpd.conf && \
-    sed -i 's/^Listen 443$/Listen 0.0.0.0:443/' /etc/apache2/conf.d/ssl.conf && \
-    sed -i 's/\(LoadModule mpm_prefork_module modules\/mod_mpm_prefork.so\)/#\1/' /etc/apache2/httpd.conf && \
-    sed -i 's/\(LoadModule proxy_fcgi_module modules\/mod_proxy_fcgi.so\)/#\1/' /etc/apache2/httpd.conf && \
-    sed -i 's/#\(LoadModule mpm_event_module modules\/mod_mpm_event.so\)/\1/' /etc/apache2/httpd.conf && \
-    sed -i 's/#\(LoadModule proxy_module modules\/mod_proxy.so\)/\1/' /etc/apache2/httpd.conf && \
-    sed -i 's/#\(LoadModule proxy_http_module modules\/mod_proxy_http.so\)/\1/' /etc/apache2/httpd.conf && \
-    sed -i 's/#\(LoadModule slotmem_shm_module modules\/mod_slotmem_shm.so\)/\1/' /etc/apache2/httpd.conf && \
-    sed -i 's/#\(LoadModule rewrite_module modules\/mod_rewrite.so\)/\1/' /etc/apache2/httpd.conf && \
-    sed -i 's/#\(LoadModule expires_module modules\/mod_expires.so\)/\1/' /etc/apache2/httpd.conf && \
-    sed -i 's/#\(LoadModule remoteip_module modules\/mod_remoteip.so\)/\1/' /etc/apache2/httpd.conf && \
-    sed -i 's/#\(LoadModule status_module modules\/mod_status.so\)/\1/' /etc/apache2/httpd.conf && \
-    sed -i 's/^#ServerName www.example.com/ServerName localhost/' /etc/apache2/httpd.conf && \
-    sed -i 's/^ServerTokens .*$/ServerTokens Prod/' /etc/apache2/httpd.conf && \
-    sed -i 's/^ServerSignature .*$/ServerSignature Off/' /etc/apache2/httpd.conf && \
-    mkdir -p /var/www/localhost/htdocs/openemr && \
-    ln -s /var/www/localhost/htdocs/openemr /openemr && \
-    ln -s /var/www/localhost/htdocs/openemr /var/www/html && \
-    chown -R apache /var/www/localhost/htdocs/openemr && \
-    chmod 666 /dev/urandom
+# Clone your forked repository
+RUN rm -rf /var/www/localhost/htdocs/openemr/* && \
+    git clone --depth=1 --branch ${FORK_BRANCH} ${FORK_REPO} /tmp/openemr && \
+    cp -rf /tmp/openemr/* /var/www/localhost/htdocs/openemr/ && \
+    rm -rf /tmp/openemr
 
-ENV COMPOSER_ALLOW_SUPERUSER=1
-
-# Clone your forked repository instead of using the tarball
-RUN git clone --depth=1 --branch ${FORK_BRANCH} ${FORK_REPO} /tmp/openemr && \
-    cp -rf /tmp/openemr/* /openemr/ && \
-    cp -rf /tmp/openemr/.* /openemr/ 2>/dev/null || true && \
-    rm -rf /tmp/openemr && \
-    cd /openemr && \
-    composer install --no-dev && \
+# Build OpenEMR
+WORKDIR /var/www/localhost/htdocs/openemr
+RUN composer install --no-dev && \
     npm install --unsafe-perm && \
-    npm run build && \
-    chmod 666 /openemr/sites/default/sqlconf.php || true && \
-    chmod 666 /openemr/interface/modules/zend_modules/config/application.config.php || true && \
-    mkdir -p /openemr/ccdaservice/node_modules/puppeteer/.local-chromium/linux-*/chrome-linux/ || true && \
-    touch /openemr/ccdaservice/node_modules/puppeteer/.local-chromium/linux-*/chrome-linux/chrome || true && \
-    chmod 666 /openemr/ccdaservice/node_modules/puppeteer/.local-chromium/linux-*/chrome-linux/chrome || true && \
-    chown -R apache /openemr && \
-    mkdir -p /openemr/interface/modules/zend_modules/public/ || true && \
-    if [ -f /openemr/contrib/util/installScripts/InstallerAuto.php ]; then \
-      cp /openemr/contrib/util/installScripts/InstallerAuto.php /openemr/interface/modules/zend_modules/public/InstallerAuto.php; \
-    fi && \
-    chown -R apache /openemr/interface/modules/zend_modules/public/ || true
+    npm run build
+
+# Set permissions
+RUN chown -R apache:apache /var/www/localhost/htdocs/openemr
 
 # Install Python dependencies
 RUN pip3 install --upgrade pip && \
     pip3 install wheel bcrypt passlib cffi==1.16.0 scp==0.14.5 ansible==7.7.0 pexpect paramiko future python-jose || true
 
 #configure sqlconf to enable remotes
-RUN if [ -f /openemr/sites/default/sqlconf.php ]; then \
-    sed -i "s@'host' => 'localhost',@'host' => 'localhost',\\\\n   'port' => '3306',@" /openemr/sites/default/sqlconf.php && \
-    sed -i "s@'login' => 'openemr',@'login' => 'openemr',\\\\n   'db_encoding' => 'utf8mb4',@" /openemr/sites/default/sqlconf.php && \
-    sed -i "s@\\\$restrictImportExport = true;@\\\$restrictImportExport = false;@" /openemr/sites/default/sqlconf.php; \
+RUN if [ -f /var/www/localhost/htdocs/openemr/sites/default/sqlconf.php ]; then \
+    sed -i "s@'host' => 'localhost',@'host' => 'localhost',\\\\n   'port' => '3306',@" /var/www/localhost/htdocs/openemr/sites/default/sqlconf.php && \
+    sed -i "s@'login' => 'openemr',@'login' => 'openemr',\\\\n   'db_encoding' => 'utf8mb4',@" /var/www/localhost/htdocs/openemr/sites/default/sqlconf.php && \
+    sed -i "s@\\\$restrictImportExport = true;@\\\$restrictImportExport = false;@" /var/www/localhost/htdocs/openemr/sites/default/sqlconf.php; \
     fi
 
 #configure apache & php properly
@@ -96,7 +57,7 @@ RUN echo "short_open_tag = Off" >> /etc/php81/php.ini && \
     echo "opcache.max_accelerated_files = 10000" >> /etc/php81/php.ini && \
     echo "opcache.max_wasted_percentage = 5" >> /etc/php81/php.ini && \
     echo 'server "default" {' > /etc/lighttpd/lighttpd.conf && \
-    echo "    root = \"/openemr\"" >> /etc/lighttpd/lighttpd.conf && \
+    echo "    root = \"/var/www/localhost/htdocs/openemr\"" >> /etc/lighttpd/lighttpd.conf && \
     echo "    port = 80" >> /etc/lighttpd/lighttpd.conf && \
     echo "}" >> /etc/lighttpd/lighttpd.conf && \
     echo "<?php" > /etc/drutils.php && \
@@ -111,8 +72,8 @@ RUN echo "short_open_tag = Off" >> /etc/php81/php.ini && \
     && chown -R apache /var/log/php 
 
 # Copy openemr.conf from your forked repo if it exists, otherwise create a default one
-RUN if [ -f /openemr/contrib/util/docker/flex/openemr.conf ]; then \
-      cp /openemr/contrib/util/docker/flex/openemr.conf /etc/apache2/conf.d/openemr.conf; \
+RUN if [ -f /var/www/localhost/htdocs/openemr/contrib/util/docker/flex/openemr.conf ]; then \
+      cp /var/www/localhost/htdocs/openemr/contrib/util/docker/flex/openemr.conf /etc/apache2/conf.d/openemr.conf; \
     else \
       echo "Alias / /var/www/localhost/htdocs/openemr/\n\
 <Directory /var/www/localhost/htdocs/openemr/>\n\
@@ -123,7 +84,7 @@ RUN if [ -f /openemr/contrib/util/docker/flex/openemr.conf ]; then \
     fi
 
 #add runner
-WORKDIR /openemr
+WORKDIR /var/www/localhost/htdocs/openemr
 VOLUME [ "/var/www/localhost/htdocs/openemr/sites", "/etc/letsencrypt", "/etc/ssl", "/etc/ssl/certs/webserver", "/usr/share/list-directory" ]
 RUN mkdir -p /etc/ssl/certs/webserver
 
