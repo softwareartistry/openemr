@@ -1,7 +1,7 @@
 FROM alpine:3.17
 
 # Add build arguments for customization
-ARG FORK_USERNAME="your-github-username"
+ARG FORK_USERNAME="softwareartistry"
 ARG FORK_BRANCH="master"
 ARG FORK_REPO="https://github.com/${FORK_USERNAME}/openemr.git"
 
