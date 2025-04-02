@@ -5,8 +5,12 @@ ARG FORK_USERNAME="softwareartistry"
 ARG FORK_BRANCH="master"
 ARG FORK_REPO="https://github.com/${FORK_USERNAME}/openemr.git"
 
-# Install git first
-RUN apk add --no-cache git
+# Install git and necessary tools
+RUN set -ex; \
+    apk add --no-cache git; \
+    # Find out where PHP config is located
+    PHP_INI=$(php -r "echo php_ini_loaded_file();"); \
+    echo "PHP INI file location: $PHP_INI" 
 
 # Clone your forked repository
 RUN rm -rf /var/www/localhost/htdocs/openemr/* && \
@@ -14,106 +18,27 @@ RUN rm -rf /var/www/localhost/htdocs/openemr/* && \
     cp -rf /tmp/openemr/* /var/www/localhost/htdocs/openemr/ && \
     rm -rf /tmp/openemr
 
-# Create necessary directories with proper permissions BEFORE building
+# Fix permissions for build process
 RUN mkdir -p /var/www/localhost/htdocs/openemr/public/assets && \
     mkdir -p /var/www/localhost/htdocs/openemr/public/themes && \
     chmod -R 777 /var/www/localhost/htdocs/openemr/public
 
-# Build OpenEMR - run as root to avoid permission issues
+# Build OpenEMR with proper permissions
 WORKDIR /var/www/localhost/htdocs/openemr
 RUN composer install --no-dev && \
     npm install --unsafe-perm && \
-    # Ensure we're using --unsafe-perm for npm run build as well
     npm run build --unsafe-perm
 
-# After build is complete, set proper restricted permissions
+# Reset permissions to secure values
 RUN chown -R apache:apache /var/www/localhost/htdocs/openemr && \
     find /var/www/localhost/htdocs/openemr -type d -exec chmod 755 {} \; && \
     find /var/www/localhost/htdocs/openemr -type f -exec chmod 644 {} \;
 
-# Install Python dependencies
-RUN pip3 install --upgrade pip && \
-    pip3 install wheel bcrypt passlib cffi==1.16.0 scp==0.14.5 ansible==7.7.0 pexpect paramiko future python-jose || true
-
-#configure sqlconf to enable remotes
-RUN if [ -f /var/www/localhost/htdocs/openemr/sites/default/sqlconf.php ]; then \
-    sed -i "s@'host' => 'localhost',@'host' => 'localhost',\\\\n   'port' => '3306',@" /var/www/localhost/htdocs/openemr/sites/default/sqlconf.php && \
-    sed -i "s@'login' => 'openemr',@'login' => 'openemr',\\\\n   'db_encoding' => 'utf8mb4',@" /var/www/localhost/htdocs/openemr/sites/default/sqlconf.php && \
-    sed -i "s@\\\$restrictImportExport = true;@\\\$restrictImportExport = false;@" /var/www/localhost/htdocs/openemr/sites/default/sqlconf.php; \
-    fi
-
-#configure apache & php properly
-RUN echo "short_open_tag = Off" >> /etc/php81/php.ini && \
-    echo "max_execution_time = 60" >> /etc/php81/php.ini && \
-    echo "max_input_time = -1" >> /etc/php81/php.ini && \
-    echo "max_input_vars = 3000" >> /etc/php81/php.ini && \
-    echo "memory_limit = 512M" >> /etc/php81/php.ini && \
-    echo "error_reporting = E_ALL & ~E_DEPRECATED & ~E_STRICT & ~E_NOTICE & ~E_WARNING" >> /etc/php81/php.ini && \
-    echo "display_errors = Off" >> /etc/php81/php.ini && \
-    echo "log_errors = On" >> /etc/php81/php.ini && \
-    echo "upload_max_filesize = 512M" >> /etc/php81/php.ini && \
-    echo "post_max_size = 512M" >> /etc/php81/php.ini && \
-    echo "register_globals = Off" >> /etc/php81/php.ini && \
-    echo "register_long_arrays = Off" >> /etc/php81/php.ini && \
-    echo "file_uploads = On" >> /etc/php81/php.ini && \
-    echo "mysqli.allow_local_infile = On" >> /etc/php81/php.ini && \
-    echo "include_path = \".:/usr/share/php\"" >> /etc/php81/php.ini && \
-    echo "error_log = \"/var/log/php/error.log\"" >> /etc/php81/php.ini && \
-    echo "[PSP_LOCAL]" >> /etc/php81/php.ini && \
-    echo "psp.discard_policy = auto" >> /etc/php81/php.ini && \
-    echo "session.gc_maxlifetime = 14400" >> /etc/php81/php.ini && \
-    echo "opcache.memory_consumption = 128" >> /etc/php81/php.ini && \
-    echo "opcache.revalidate_freq = 0" >> /etc/php81/php.ini && \
-    echo "opcache.validate_timestamps = 1" >> /etc/php81/php.ini && \
-    echo "opcache.max_accelerated_files = 10000" >> /etc/php81/php.ini && \
-    echo "opcache.max_wasted_percentage = 5" >> /etc/php81/php.ini && \
-    echo 'server "default" {' > /etc/lighttpd/lighttpd.conf && \
-    echo "    root = \"/var/www/localhost/htdocs/openemr\"" >> /etc/lighttpd/lighttpd.conf && \
-    echo "    port = 80" >> /etc/lighttpd/lighttpd.conf && \
-    echo "}" >> /etc/lighttpd/lighttpd.conf && \
-    echo "<?php" > /etc/drutils.php && \
-    echo "\$GLOBALS['support_phone'] = ''" >> /etc/drutils.php && \
-    echo "\$GLOBALS['support_email'] = 'support@pennpiratecare.org'" >> /etc/drutils.php && \
-    echo "\$GLOBALS['online_support_link'] = 'https://community.open-emr.org/'" >> /etc/drutils.php && \
-    echo "\$GLOBALS['linux_server_hostname'] = 'localhost'" >> /etc/drutils.php && \
-    echo "\$GLOBALS['linux_server_ip'] = 'localhost'" >> /etc/drutils.php && \
-    echo "\$GLOBALS['linux_server_domain'] = 'localhost'" >> /etc/drutils.php && \
-    mkdir -p /var/log/php \
-    && mkdir -p /etc/apache2/conf.d \
-    && chown -R apache /var/log/php 
-
-# Copy openemr.conf from your forked repo if it exists, otherwise create a default one
-RUN if [ -f /var/www/localhost/htdocs/openemr/contrib/util/docker/flex/openemr.conf ]; then \
-      cp /var/www/localhost/htdocs/openemr/contrib/util/docker/flex/openemr.conf /etc/apache2/conf.d/openemr.conf; \
-    else \
-      echo "Alias / /var/www/localhost/htdocs/openemr/\n\
-<Directory /var/www/localhost/htdocs/openemr/>\n\
-    Options Indexes FollowSymLinks\n\
-    AllowOverride All\n\
-    Require all granted\n\
-</Directory>" > /etc/apache2/conf.d/openemr.conf; \
-    fi
-
-#add runner
-WORKDIR /var/www/localhost/htdocs/openemr
-VOLUME [ "/var/www/localhost/htdocs/openemr/sites", "/etc/letsencrypt", "/etc/ssl", "/etc/ssl/certs/webserver", "/usr/share/list-directory" ]
-RUN mkdir -p /etc/ssl/certs/webserver
-
-# Create needed scripts (instead of trying to copy them)
-RUN echo '#!/bin/sh\nset -e\nexec "$@"' > /docker-entrypoint.sh && \
-    chmod +x /docker-entrypoint.sh
-
-RUN echo '#!/bin/sh\nhttpd -D FOREGROUND' > /openemr.sh && \
-    chmod +x /openemr.sh
-
-# Create php-fpm config if needed
-RUN if [ ! -f /etc/php81/php-fpm.conf ]; then \
-      echo "[global]\ninclude=/etc/php81/php-fpm.d/*.conf" > /etc/php81/php-fpm.conf; \
-    fi
+# Ensure volumes are properly set
+VOLUME [ "/var/www/localhost/htdocs/openemr/sites" ]
 
 # Expose ports
 EXPOSE 80
 EXPOSE 443
 
-ENTRYPOINT ["/docker-entrypoint.sh"]
-CMD ["/openemr.sh"] 
+# Use the entrypoint and cmd from the base image 
