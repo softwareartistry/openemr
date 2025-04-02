@@ -1,3 +1,48 @@
+# FROM openemr/openemr:7.0.0
+
+# # Add build arguments for customization
+# ARG FORK_USERNAME="softwareartistry"
+# ARG FORK_BRANCH="master"
+# ARG FORK_REPO="https://github.com/${FORK_USERNAME}/openemr.git"
+
+# # Install git and necessary tools
+# RUN set -ex; \
+#     apk add --no-cache git; \
+#     # Find out where PHP config is located
+#     PHP_INI=$(php -r "echo php_ini_loaded_file();"); \
+#     echo "PHP INI file location: $PHP_INI" 
+
+# # Clone your forked repository
+# RUN rm -rf /var/www/localhost/htdocs/openemr/* && \
+#     git clone --depth=1 --branch ${FORK_BRANCH} ${FORK_REPO} /tmp/openemr && \
+#     cp -rf /tmp/openemr/* /var/www/localhost/htdocs/openemr/ && \
+#     rm -rf /tmp/openemr
+
+# # Fix permissions for build process
+# RUN mkdir -p /var/www/localhost/htdocs/openemr/public/assets && \
+#     mkdir -p /var/www/localhost/htdocs/openemr/public/themes && \
+#     chmod -R 777 /var/www/localhost/htdocs/openemr/public
+
+# # Build OpenEMR with proper permissions
+# WORKDIR /var/www/localhost/htdocs/openemr
+# RUN composer install --no-dev && \
+#     npm install --unsafe-perm && \
+#     npm run build --unsafe-perm
+
+# # Reset permissions to secure values
+# RUN chown -R apache:apache /var/www/localhost/htdocs/openemr && \
+#     find /var/www/localhost/htdocs/openemr -type d -exec chmod 755 {} \; && \
+#     find /var/www/localhost/htdocs/openemr -type f -exec chmod 644 {} \;
+
+# # Ensure volumes are properly set
+# VOLUME [ "/var/www/localhost/htdocs/openemr/sites" ]
+
+# # Expose ports
+# EXPOSE 80
+# EXPOSE 443
+
+# # Use the entrypoint and cmd from the base image 
+
 # Use the official OpenEMR image as a base
 FROM openemr/openemr:7.0.0 as base
 
@@ -14,8 +59,11 @@ ARG FORK_REPO
 RUN apk add --no-cache git
 WORKDIR /tmp
 # Shallow clone with depth=1 and only the specific branch - much faster
-RUN git clone --depth=1 --branch ${FORK_BRANCH} --single-branch ${FORK_REPO} openemr
-
+RUN rm -rf /var/www/localhost/htdocs/openemr/* && \
+    git clone --depth=1 --branch ${FORK_BRANCH} ${FORK_REPO} /tmp/openemr && \
+    cp -rf /tmp/openemr/* /var/www/localhost/htdocs/openemr/ && \
+    rm -rf /tmp/openemr
+    
 # Final stage - only copy the code we need
 FROM base
 COPY --from=code-downloader /tmp/openemr /var/www/localhost/htdocs/openemr-custom
