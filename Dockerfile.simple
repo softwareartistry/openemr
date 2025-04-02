@@ -14,14 +14,22 @@ RUN rm -rf /var/www/localhost/htdocs/openemr/* && \
     cp -rf /tmp/openemr/* /var/www/localhost/htdocs/openemr/ && \
     rm -rf /tmp/openemr
 
-# Build OpenEMR
+# Create necessary directories with proper permissions BEFORE building
+RUN mkdir -p /var/www/localhost/htdocs/openemr/public/assets && \
+    mkdir -p /var/www/localhost/htdocs/openemr/public/themes && \
+    chmod -R 777 /var/www/localhost/htdocs/openemr/public
+
+# Build OpenEMR - run as root to avoid permission issues
 WORKDIR /var/www/localhost/htdocs/openemr
 RUN composer install --no-dev && \
     npm install --unsafe-perm && \
-    npm run build
+    # Ensure we're using --unsafe-perm for npm run build as well
+    npm run build --unsafe-perm
 
-# Set permissions
-RUN chown -R apache:apache /var/www/localhost/htdocs/openemr
+# After build is complete, set proper restricted permissions
+RUN chown -R apache:apache /var/www/localhost/htdocs/openemr && \
+    find /var/www/localhost/htdocs/openemr -type d -exec chmod 755 {} \; && \
+    find /var/www/localhost/htdocs/openemr -type f -exec chmod 644 {} \;
 
 # Install Python dependencies
 RUN pip3 install --upgrade pip && \
