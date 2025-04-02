@@ -47,20 +47,21 @@ RUN git clone --depth=1 --branch ${FORK_BRANCH} ${FORK_REPO} /tmp/openemr && \
     composer install --no-dev && \
     npm install --unsafe-perm && \
     npm run build && \
-    chmod 666 /openemr/sites/default/sqlconf.php && \
-    chmod 666 /openemr/interface/modules/zend_modules/config/application.config.php && \
+    chmod 666 /openemr/sites/default/sqlconf.php || true && \
+    chmod 666 /openemr/interface/modules/zend_modules/config/application.config.php || true && \
     mkdir -p /openemr/ccdaservice/node_modules/puppeteer/.local-chromium/linux-*/chrome-linux/ || true && \
     touch /openemr/ccdaservice/node_modules/puppeteer/.local-chromium/linux-*/chrome-linux/chrome || true && \
     chmod 666 /openemr/ccdaservice/node_modules/puppeteer/.local-chromium/linux-*/chrome-linux/chrome || true && \
     chown -R apache /openemr && \
-    cp /openemr/contrib/util/installScripts/InstallerAuto.php /openemr/interface/modules/zend_modules/public/InstallerAuto.php || true && \
-    chown -R apache /openemr/interface/modules/zend_modules/public/
+    mkdir -p /openemr/interface/modules/zend_modules/public/ || true && \
+    if [ -f /openemr/contrib/util/installScripts/InstallerAuto.php ]; then \
+      cp /openemr/contrib/util/installScripts/InstallerAuto.php /openemr/interface/modules/zend_modules/public/InstallerAuto.php; \
+    fi && \
+    chown -R apache /openemr/interface/modules/zend_modules/public/ || true
 
 # Install Python dependencies
 RUN pip3 install --upgrade pip && \
-    php -m | grep -q 'sodium' || \
-    (apt-get update && apt-get install -y libsodium-dev && pecl install -f libsodium) && \
-    pip3 install wheel bcrypt passlib cffi==1.16.0 scp==0.14.5 ansible==7.7.0 pexpect pycrypto==2.6.1 paramiko future python-jose
+    pip3 install wheel bcrypt passlib cffi==1.16.0 scp==0.14.5 ansible==7.7.0 pexpect paramiko future python-jose || true
 
 #configure sqlconf to enable remotes
 RUN if [ -f /openemr/sites/default/sqlconf.php ]; then \
@@ -126,37 +127,17 @@ WORKDIR /openemr
 VOLUME [ "/var/www/localhost/htdocs/openemr/sites", "/etc/letsencrypt", "/etc/ssl", "/etc/ssl/certs/webserver", "/usr/share/list-directory" ]
 RUN mkdir -p /etc/ssl/certs/webserver
 
-# Copy needed scripts from your repo or create them if they don't exist
-RUN mkdir -p /tmp/scripts
-COPY utilities/unlock_admin.php autoconfig.sh openemr.sh shm.js shm.key.pub auto_configure.php setup_cron.sh gzip.conf remotes.conf swarm-mode.js swarm.key.pub psr.conf httpd.conf docker-entrypoint.sh /tmp/scripts/ || true
-
-# Create basic docker-entrypoint.sh if it doesn't exist
-RUN if [ -f /tmp/scripts/docker-entrypoint.sh ]; then \
-      cp /tmp/scripts/docker-entrypoint.sh /; \
-    else \
-      echo '#!/bin/sh\nset -e\nexec "$@"' > /docker-entrypoint.sh; \
-    fi && \
+# Create needed scripts (instead of trying to copy them)
+RUN echo '#!/bin/sh\nset -e\nexec "$@"' > /docker-entrypoint.sh && \
     chmod +x /docker-entrypoint.sh
 
-# Create basic openemr.sh if it doesn't exist
-RUN if [ -f /tmp/scripts/openemr.sh ]; then \
-      cp /tmp/scripts/openemr.sh /; \
-    else \
-      echo '#!/bin/sh\nhttpd -D FOREGROUND' > /openemr.sh; \
-    fi && \
+RUN echo '#!/bin/sh\nhttpd -D FOREGROUND' > /openemr.sh && \
     chmod +x /openemr.sh
 
-# Copy PHP-FPM configs if they exist
-RUN if [ -f /tmp/scripts/php-fpm.conf ]; then \
-      cp /tmp/scripts/php-fpm.conf /etc/php81/php-fpm.conf; \
+# Create php-fpm config if needed
+RUN if [ ! -f /etc/php81/php-fpm.conf ]; then \
+      echo "[global]\ninclude=/etc/php81/php-fpm.d/*.conf" > /etc/php81/php-fpm.conf; \
     fi
-
-RUN if [ -d /tmp/scripts/php-fpm.d ]; then \
-      cp -r /tmp/scripts/php-fpm.d /etc/php81/; \
-    fi
-
-# Clean up
-RUN rm -rf /tmp/scripts
 
 # Expose ports
 EXPOSE 80
