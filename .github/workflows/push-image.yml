@@ -37,7 +37,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ./Dockerfile
+          file: ./DockerFile
           build-args: |
             GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}
             REPO_URL=https://github.com/softwareartistry/openemr.git
