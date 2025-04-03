@@ -1,0 +1,51 @@
+name: Build and Deploy OpenEMR Image
+
+on:
+  push:
+    branches: [ sprint, main, push-docker ]
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to build from'
+        required: false
+        default: 'main'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Private Registry
+        uses: docker/login-action@v3
+        with:
+          registry: registry.314ecorp.tech
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+          
+      - name: Build and push OpenEMR image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./DockerFile
+          build-args: |
+            GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}
+            REPO_URL=https://github.com/softwareartistry/openemr.git
+            BRANCH=${{ github.event.inputs.branch || 'main' }}
+          tags: registry.314ecorp.tech/openemr:latest,registry.314ecorp.tech/openemr:${{ github.sha }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          cache-from: type=registry,ref=registry.314ecorp.tech/openemr:latest
+          cache-to: type=inline
+          secrets: |
+            GIT_AUTH_TOKEN=${{ secrets.GITHUB_TOKEN }}
