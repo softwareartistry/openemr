@@ -2,7 +2,7 @@ name: Build and Deploy OpenEMR Image
 
 on:
   push:
-    branches: [ main, push-docker ]
+    branches: [ main, push-docker, sprint]
   workflow_dispatch:
     inputs:
       branch:
